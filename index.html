@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1F4D3A">
+<title>Smart Inventory - Daily stock and sales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Young+Serif&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --pista:#1F4D3A; --pista-2:#2D6A50; --pista-tint:#E7F0E6;
+  --marigold:#F2A900; --marigold-tint:#FFF3CF;
+  --beet:#A8284F; --beet-tint:#FBE4EA;
+  --paper:#F7F8F2; --card:#FFFFFF; --ink:#1B2620; --mute:#68766D; --line:#DCE3D8;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.45}
+h1,h2,h3{font-family:'Young Serif',Georgia,serif;font-weight:400;margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--marigold);outline-offset:2px}
+
+/* Header: the date is the hero, because every entry belongs to a day */
+.top{background:var(–pista);color:#fff;padding:14px 16px 0}
+.top-in{max-width:1180px;margin:0 auto}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.brand h1{font-size:20px;letter-spacing:.2px}
+.saved{font-size:13px;opacity:.85;min-height:18px}
+.saved.bad{color:#FFC9D6;opacity:1;font-weight:600}
+.datebar{display:flex;align-items:center;gap:10px;margin:14px 0 10px;flex-wrap:wrap}
+.datebar .nav{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;width:44px;height:44px;font-size:20px}
+.datebar .nav:hover{background:rgba(255,255,255,.22)}
+.datebig{font-family:‘Young Serif’,Georgia,serif;font-size:26px;line-height:1.1;flex:1 1 220px;min-width:200px}
+.datebig small{display:block;font-family:‘Hanken Grotesk’,sans-serif;font-size:13px;opacity:.8;margin-top:3px}
+.datepick{height:44px;border-radius:10px;border:2px solid var(–marigold);background:#fff;color:var(–ink);padding:0 10px;font-size:16px;min-width:160px}
+.btn{border:1px solid var(–line);background:#fff;border-radius:10px;padding:0 14px;height:44px;font-weight:600}
+.btn:hover{border-color:var(–pista-2)}
+.btn.gold{background:var(–marigold);border-color:var(–marigold);color:#2a1d00}
+.btn.gold:hover{background:#ffbb1f}
+.btn.ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.3)}
+.btn.ghost:hover{background:rgba(255,255,255,.22)}
+.btn.danger{color:var(–beet);border-color:#E9B8C6}
+.btn.sm{height:36px;padding:0 10px;font-size:14px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:12px}
+
+.tabs{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{background:transparent;border:0;color:#fff;opacity:.75;padding:12px 16px;border-radius:12px 12px 0 0;font-weight:600;white-space:nowrap}
+.tab[aria-selected=true]{background:var(–paper);color:var(–pista);opacity:1}
+
+main{max-width:1180px;margin:0 auto;padding:16px}
+.panel[hidden]{display:none}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:var(–card);border:1px solid var(–line);border-left:5px solid var(–pista-2);border-radius:10px;padding:10px 12px}
+.kpi:first-child{border-left-color:var(–marigold)}
+.kpi b{display:block;font-family:‘Young Serif’,Georgia,serif;font-weight:400;font-size:22px}
+.kpi span{color:var(–mute);font-size:13px}
+.alerts{background:var(–card);border:1px solid var(–line);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+.alerts.has{border-color:#E9B8C6;background:var(–beet-tint)}
+.alerts.fine{background:var(–pista-tint);border-color:#C5D9C4}
+.chip{display:inline-block;border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:13px;font-weight:600}
+.chip.bad{background:var(–beet);color:#fff}
+.chip.warn{background:var(–marigold);color:#2a1d00}
+
+/* Tables */
+.wrap{background:var(–card);border:1px solid var(–line);border-radius:12px;overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{background:var(–pista);color:#fff;font-weight:600;font-size:13px;text-align:right;padding:9px 8px;white-space:nowrap}
+th:first-child,td.item{text-align:left}
+td{padding:4px 8px;border-bottom:1px solid var(–line);text-align:right;white-space:nowrap}
+td.item{font-weight:600;white-space:normal;min-width:130px}
+tr.cat td{background:var(–pista-tint);color:var(–pista);font-family:‘Young Serif’,Georgia,serif;text-align:left;padding:7px 10px;border-bottom:1px solid #C5D9C4}
+tr.rbad td{background:var(–beet-tint)}
+tr.rwarn td{background:var(–marigold-tint)}
+tr.rbad td.item{border-left:4px solid var(–beet)}
+tr.rwarn td.item{border-left:4px solid var(–marigold)}
+td input,td select{border:1px solid var(–line);border-radius:8px;padding:8px 8px;background:#fff;width:92px;text-align:right}
+td input.ovr{border-color:var(–marigold);background:var(–marigold-tint)}
+td select{width:auto;text-align:left}
+td input.txt{width:100%;min-width:150px;text-align:left}
+td.calc{font-weight:600}
+tfoot td{background:var(–pista-tint);font-weight:700;border-top:2px solid var(–pista)}
+.badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:700}
+.badge.ok{background:var(–pista-tint);color:var(–pista)}
+.badge.warn{background:var(–marigold);color:#2a1d00}
+.badge.bad{background:var(–beet);color:#fff}
+.hint{color:var(–mute);font-size:13px;margin:8px 2px}
+.empty{padding:28px;text-align:center;color:var(–mute)}
+
+.card{background:var(–card);border:1px solid var(–line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h3{font-size:18px;margin-bottom:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px}
+.row label{display:flex;flex-direction:column;font-size:13px;color:var(–mute);gap:4px}
+.row input[type=date]{height:44px;border:1px solid var(–line);border-radius:10px;padding:0 10px;font-size:16px;background:#fff}
+textarea{width:100%;min-height:90px;border:1px solid var(–line);border-radius:10px;padding:10px;background:#fff}
+
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(–ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:92vw}
+.toast.bad{background:var(–beet)}
+.toast[hidden]{display:none}
+
+@media (max-width:760px){
+.kpis{grid-template-columns:1fr 1fr}
+.grid2{grid-template-columns:1fr}
+.datebig{font-size:22px}
+/* entry rows become one card per item on phones */
+.entry thead,.entry tfoot{display:none}
+.entry,.entry tbody{display:block}
+.wrap.entrywrap{background:transparent;border:0;overflow:visible}
+.entry tr{display:block;background:#fff;border:1px solid var(–line);border-radius:12px;margin:0 0 10px;padding:8px 12px}
+.entry tr.cat{background:none;border:0;padding:0;margin:14px 0 6px}
+.entry tr.cat td{display:block;border-radius:8px}
+.entry td{display:flex;justify-content:space-between;align-items:center;border:0;padding:4px 0;white-space:normal}
+.entry td::before{content:attr(data-label);color:var(–mute);font-size:13px;font-weight:500}
+.entry td.item{font-family:‘Young Serif’,Georgia,serif;font-weight:400;font-size:17px;padding-bottom:6px}
+.entry td.item::before{content:none}
+.entry tr.cat td::before{content:none}
+.entry tr.rbad td,.entry tr.rwarn td{background:transparent}
+.entry tr.rbad{background:var(–beet-tint);border-color:#E9B8C6}
+.entry tr.rwarn{background:var(–marigold-tint);border-color:#F0D58A}
+.entry td input{width:130px;height:42px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <h1>Smart inventory</h1>
+      <div class="saved" id="saveState">Ready</div>
+    </div>
+
+```
+<div class="datebar">
+  <button class="nav" id="prevDay" aria-label="Previous day">&#8249;</button>
+  <div class="datebig"><span id="dateNice"></span><small id="dayNote"></small></div>
+  <input type="date" id="date" class="datepick" aria-label="Pick a date">
+  <button class="nav" id="nextDay" aria-label="Next day">&#8250;</button>
+  <button class="btn ghost" id="todayBtn">Today</button>
+</div>
+
+<div class="actions">
+  <button class="btn gold" id="exportDay">Export this day (Excel)</button>
+  <button class="btn ghost" id="exportAll">Export all days (Excel)</button>
+  <button class="btn ghost" id="backupBtn">Backup</button>
+  <button class="btn ghost" id="restoreBtn">Restore</button>
+  <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="entry" aria-selected="true">Daily entry</button>
+  <button class="tab" role="tab" data-tab="items" aria-selected="false">Items and prices</button>
+  <button class="tab" role="tab" data-tab="summary" aria-selected="false">Day summary</button>
+  <button class="tab" role="tab" data-tab="report" aria-selected="false">Date range report</button>
+</div>
+```
+
+  </div>
+</header>
+
+<main>
+  <!-- DAILY ENTRY -->
+  <section class="panel" id="p-entry">
+    <div class="kpis">
+      <div class="kpi"><b id="kSales">₹0.00</b><span>Sales value</span></div>
+      <div class="kpi"><b id="kSold">0</b><span>Quantity sold</span></div>
+      <div class="kpi"><b id="kWaste">0</b><span>Wastage and returns</span></div>
+      <div class="kpi"><b id="kClose">0</b><span>Closing stock (all units)</span></div>
+    </div>
+    <div class="alerts" id="alerts"></div>
+    <div class="wrap entrywrap">
+      <table class="entry">
+        <thead><tr>
+          <th>Item</th><th>Opening</th><th>Received</th><th>Total available</th><th>Sold</th><th>Wastage/returns</th><th>Closing</th><th>Unit</th><th>Rate (₹)</th><th>Sales value</th><th>Status</th>
+        </tr></thead>
+        <tbody id="entryBody"></tbody>
+        <tfoot><tr>
+          <td class="item">Total</td><td></td><td id="tRecv"></td><td></td><td id="tSold"></td><td id="tWaste"></td><td id="tClose"></td><td></td><td></td><td id="tVal"></td><td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <p class="hint">Opening stock fills in from the previous day's closing. Type in the Opening box (it turns yellow) only to correct a stock count. Clear the box to go back to automatic. Quantity totals add Pcs and Kg together, so compare days using Sales value.</p>
+    <button class="btn danger sm" id="resetDay">Clear this day's entries</button>
+  </section>
+
+  <!-- ITEMS -->
+
+  <section class="panel" id="p-items" hidden>
+    <div class="card">
+      <h3>Items and prices</h3>
+      <p class="hint" style="margin-top:0">Changes save automatically. A price change applies to days you enter from now on. Days already saved keep the price they were entered with.</p>
+      <div class="wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Category</th><th>Unit</th><th>Rate (₹)</th><th>Low stock at</th><th>Starting stock</th><th></th></tr></thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn gold" id="addItem">Add item</button>
+      </div>
+      <p class="hint">Low stock at: closing stock at or below this number shows a Low warning (0 turns it off). Starting stock: the opening stock before your first saved day.</p>
+    </div>
+    <div class="card">
+      <h3>Add many items at once</h3>
+      <p class="hint" style="margin-top:0">One item per line: Name, Category, Unit, Rate. Example: Kaju Barfi, Sweets, Kg, 900</p>
+      <textarea id="bulkText" placeholder="Soan Papdi, Sweets, Kg, 480&#10;Cold drink 250ml, Beverages, Bottle, 20"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn" id="bulkAdd">Add these items</button></div>
+    </div>
+  </section>
+
+  <!-- DAY SUMMARY -->
+
+  <section class="panel" id="p-summary" hidden>
+    <div class="kpis" id="sumKpis"></div>
+    <div class="grid2">
+      <div class="card"><h3>Best sellers</h3><div id="sumTop"></div></div>
+      <div class="card"><h3>By category</h3><div id="sumCat"></div></div>
+    </div>
+    <div class="card"><h3>Stock alerts</h3><div id="sumAlerts"></div></div>
+  </section>
+
+  <!-- RANGE REPORT -->
+
+  <section class="panel" id="p-report" hidden>
+    <div class="card">
+      <div class="row">
+        <label>From<input type="date" id="rFrom"></label>
+        <label>To<input type="date" id="rTo"></label>
+        <button class="btn gold" id="exportRange">Export this range (Excel)</button>
+      </div>
+      <div class="kpis" id="repKpis"></div>
+      <h3>Day by day</h3>
+      <div class="wrap" id="repDays"></div>
+    </div>
+    <div class="card"><h3>Item by item</h3><div class="wrap" id="repItems"></div></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+const KEY='sweetShopInventory_v1';
+const CATS=['Sweets','Snacks','Beverages','Water bottles','Other'];
+const UNITS=['Pcs','Kg','Bottle','Glass','Pkt','Ltr'];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n};
+const r3=x=>Math.round(x*1000)/1000;
+const money=x=>'₹'+(Math.round(x*100)/100).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad=n=>String(n).padStart(2,'0');
+const toISO=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parseISO=s=>{const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2],12)};
+const prettyDate=s=>parseISO(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+const weekday=s=>parseISO(s).toLocaleDateString('en-IN',{weekday:'long'});
+const vv=x=>(x===undefined||x===null)?'':x;
+const ci=c=>{const i=CATS.indexOf(c);return i<0?99:i};
+
+/* ---------- storage ---------- */
+function seed(){
+  const L=[['Atta Laddu','Sweets','Pcs',20],['Besan Laddu','Sweets','Pcs',20],['Gulab Jamun','Sweets','Pcs',15],
+    ['Jalebi','Sweets','Kg',320],['Kaju Barfi','Sweets','Kg',900],['Samosa','Snacks','Pcs',15],
+    ['Tea','Beverages','Glass',10],['Water 1ltr','Water bottles','Bottle',20]];
+  return {items:L.map((r,i)=>({id:'i'+(i+1),name:r[0],category:r[1],unit:r[2],rate:r[3],reorder:0,init:0})),days:{},nextId:L.length+1};
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw){const d=JSON.parse(raw);if(d&&Array.isArray(d.items)&&d.days&&typeof d.days==='object'){if(!d.nextId)d.nextId=d.items.length+1000;return d;}}
+  }catch(e){}
+  return seed();
+}
+let db=load();
+let saveTimer=null;
+function save(){
+  clearTimeout(saveTimer);
+  $('saveState').textContent='Saving...';$('saveState').className='saved';
+  saveTimer=setTimeout(()=>{
+    try{localStorage.setItem(KEY,JSON.stringify(db));$('saveState').textContent='Saved on this device';$('saveState').className='saved';}
+    catch(e){$('saveState').textContent='Could not save. Browser storage is full or blocked.';$('saveState').className='saved bad';}
+  },250);
+}
+function toast(msg,bad){const t=$('toast');t.textContent=msg;t.className='toast'+(bad?' bad':'');t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2800);}
+
+/* ---------- calculations ---------- */
+const sortedDates=()=>Object.keys(db.days).sort();
+const orderedItems=()=>db.items.map((it,i)=>[it,i]).sort((a,b)=>ci(a[0].category)-ci(b[0].category)||a[1]-b[1]).map(x=>x[0]);
+function openingAuto(date,id){
+  const it=db.items.find(i=>i.id===id);let run=it?num(it.init):0;
+  for(const d of sortedDates()){
+    if(d>=date)break;
+    const e=db.days[d][id];
+    if(e){
+      const o=(e.open!==null&&e.open!==undefined&&e.open!=='')?num(e.open):run;
+      run=r3(o+num(e.recv)-num(e.sold)-num(e.waste));
+    }
+  }
+  return run;
+}
+function calc(date,it){
+  const e=(db.days[date]||{})[it.id]||{};
+  const auto=openingAuto(date,it.id);
+  const hasO=e.open!==null&&e.open!==undefined&&e.open!=='';
+  const open=hasO?num(e.open):auto;
+  const recv=num(e.recv),sold=num(e.sold),waste=num(e.waste);
+  const rate=(e.rate!==undefined&&e.rate!=='')?num(e.rate):num(it.rate);
+  const avail=r3(open+recv),close=r3(avail-sold-waste);
+  return {e,auto,hasO,open:r3(open),recv,sold,waste,rate,avail,close,value:sold*rate};
+}
+function status(c,it){
+  if(c.close<0)return{cls:'bad',label:'Negative'};
+  if(c.close===0)return{cls:'warn',label:'Out of stock'};
+  if(num(it.reorder)>0&&c.close<=num(it.reorder))return{cls:'warn',label:'Low'};
+  return{cls:'ok',label:'OK'};
+}
+function ensureEntry(date,id){
+  const it=db.items.find(i=>i.id===id);
+  db.days[date]=db.days[date]||{};
+  db.days[date][id]=db.days[date][id]||{open:null,recv:'',sold:'',waste:'',rate:it?it.rate:0};
+  return db.days[date][id];
+}
+function dayTotals(date){
+  const t={recv:0,sold:0,waste:0,close:0,value:0,soldItems:0,rows:[]};
+  for(const it of orderedItems()){
+    const c=calc(date,it);t.rows.push({it,c});
+    t.recv+=c.recv;t.sold+=c.sold;t.waste+=c.waste;t.close+=c.close;t.value+=c.value;if(c.sold>0)t.soldItems++;
+  }
+  return t;
+}
+
+/* ---------- date + tabs ---------- */
+let activeTab='entry';
+const cur=()=>$('date').value;
+function setDate(s){if(!s)return;$('date').value=s;refresh();}
+function shiftDay(n){const d=parseISO(cur());d.setDate(d.getDate()+n);setDate(toISO(d));}
+function refresh(){
+  const d=cur();if(!d)return;
+  $('dateNice').firstChild&&0;
+  $('dateNice').textContent=prettyDate(d);
+  $('dayNote').textContent=weekday(d)+(db.days[d]?' - entries saved':' - no entries yet');
+  if(activeTab==='entry')renderEntry();
+  if(activeTab==='items')renderItems();
+  if(activeTab==='summary')renderSummary();
+  if(activeTab==='report')renderReport();
+}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  activeTab=b.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));
+  document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!=='p-'+activeTab);
+  refresh();
+}));
+$('date').addEventListener('change',()=>{if(!cur())return;refresh();});
+$('prevDay').addEventListener('click',()=>shiftDay(-1));
+$('nextDay').addEventListener('click',()=>shiftDay(1));
+$('todayBtn').addEventListener('click',()=>setDate(toISO(new Date())));
+
+/* ---------- daily entry ---------- */
+function numInput(f,val,extra){return `<input type="number" inputmode="decimal" step="any" data-f="${f}" value="${esc(vv(val))}" ${extra||''}>`;}
+function renderEntry(){
+  const date=cur(),tb=$('entryBody');
+  if(!db.items.length){tb.innerHTML=`<tr><td colspan="11" class="empty">No items yet. Add items in the Items and prices tab.</td></tr>`;refreshTotals();return;}
+  let html='',last=null;
+  for(const it of orderedItems()){
+    if(it.category!==last){html+=`<tr class="cat"><td colspan="11">${esc(it.category)}</td></tr>`;last=it.category;}
+    const c=calc(date,it);
+    html+=`<tr data-id="${it.id}">
+      <td class="item">${esc(it.name)}</td>
+      <td data-label="Opening">${numInput('open',c.open,'aria-label="Opening stock"')}</td>
+      <td data-label="Received">${numInput('recv',c.e.recv,'min="0" placeholder="0" aria-label="Received today"')}</td>
+      <td class="calc avail" data-label="Total available"></td>
+      <td data-label="Sold">${numInput('sold',c.e.sold,'min="0" placeholder="0" aria-label="Sold today"')}</td>
+      <td data-label="Wastage/returns">${numInput('waste',c.e.waste,'min="0" placeholder="0" aria-label="Wastage or returns"')}</td>
+      <td class="calc close" data-label="Closing"></td>
+      <td data-label="Unit">${esc(it.unit)}</td>
+      <td data-label="Rate (₹)">${numInput('rate',c.rate,'min="0" aria-label="Rate per unit"')}</td>
+      <td class="calc val" data-label="Sales value"></td>
+      <td class="stat" data-label="Status"></td>
+    </tr>`;
+  }
+  tb.innerHTML=html;
+  tb.querySelectorAll('tr[data-id]').forEach(refreshRow);
+  refreshTotals();
+}
+function refreshRow(tr){
+  const it=db.items.find(i=>i.id===tr.dataset.id);if(!it)return;
+  const c=calc(cur(),it),st=status(c,it);
+  tr.querySelector('.avail').textContent=r3(c.avail);
+  tr.querySelector('.close').textContent=r3(c.close);
+  tr.querySelector('.val').textContent=money(c.value);
+  tr.querySelector('.stat').innerHTML=`<span class="badge ${st.cls}">${st.label}</span>`;
+  tr.className=st.cls==='bad'?'rbad':st.cls==='warn'?'rwarn':'';
+  tr.querySelector('[data-f=open]').classList.toggle('ovr',c.hasO);
+}
+function alertLists(t){
+  const L={bad:[],out:[],low:[]};
+  t.rows.forEach(({it,c})=>{
+    if(c.close<0)L.bad.push(it.name);
+    else if(c.close===0)L.out.push(it.name);
+    else if(num(it.reorder)>0&&c.close<=num(it.reorder))L.low.push(it.name);
+  });
+  return L;
+}
+function chips(arr,cls,label){return arr.length?`<div><b>${label} (${arr.length})</b> `+arr.map(n=>`<span class="chip ${cls}">${esc(n)}</span>`).join('')+'</div>':'';}
+function alertHTML(L){
+  const h=chips(L.bad,'bad','Negative stock - check the entries')+chips(L.out,'warn','Out of stock')+chips(L.low,'warn','Low stock');
+  return h||'All items have stock above their low stock level.';
+}
+function refreshTotals(){
+  const t=dayTotals(cur());
+  $('kSales').textContent=money(t.value);$('kSold').textContent=r3(t.sold);$('kWaste').textContent=r3(t.waste);$('kClose').textContent=r3(t.close);
+  $('tRecv').textContent=r3(t.recv);$('tSold').textContent=r3(t.sold);$('tWaste').textContent=r3(t.waste);$('tClose').textContent=r3(t.close);$('tVal').textContent=money(t.value);
+  const L=alertLists(t),has=L.bad.length||L.out.length||L.low.length;
+  const box=$('alerts');box.className='alerts '+(has?'has':'fine');box.innerHTML=alertHTML(L);
+}
+$('entryBody').addEventListener('input',ev=>{
+  const inp=ev.target,f=inp.dataset.f;if(!f)return;
+  const tr=inp.closest('tr'),date=cur();
+  const e=ensureEntry(date,tr.dataset.id);
+  if(f==='open')e.open=inp.value===''?null:inp.value;else e[f]=inp.value;
+  save();refreshRow(tr);refreshTotals();
+  $('dayNote').textContent=weekday(date)+' - entries saved';
+});
+$('entryBody').addEventListener('change',ev=>{
+  const inp=ev.target;
+  if(inp.dataset.f==='open'&&inp.value===''){
+    const tr=inp.closest('tr'),it=db.items.find(i=>i.id===tr.dataset.id);
+    if(it){inp.value=r3(calc(cur(),it).auto);refreshRow(tr);}
+  }
+});
+$('resetDay').addEventListener('click',()=>{
+  const d=cur();if(!db.days[d]){toast('Nothing saved for this day');return;}
+  if(!confirm('Clear all entries for '+prettyDate(d)+'? This cannot be undone.'))return;
+  delete db.days[d];save();refresh();toast('Day cleared');
+});
+
+/* ---------- items ---------- */
+function opts(list,sel){const l=list.includes(sel)?list:[...list,sel];return l.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('');}
+function renderItems(){
+  const tb=$('itemsBody');
+  if(!db.items.length){tb.innerHTML=`<tr><td colspan="7" class="empty">No items yet. Press Add item.</td></tr>`;return;}
+  tb.innerHTML=db.items.map(it=>`<tr data-id="${it.id}">
+    <td class="item"><input class="txt" data-k="name" value="${esc(it.name)}" aria-label="Item name"></td>
+    <td><select data-k="category" aria-label="Category">${opts(CATS,it.category)}</select></td>
+    <td><select data-k="unit" aria-label="Unit">${opts(UNITS,it.unit)}</select></td>
+    <td><input type="number" inputmode="decimal" step="any" min="0" data-k="rate" value="${esc(vv(it.rate))}" aria-label="Rate"></td>
+    <td><input type="number" inputmode="decimal" step="any" min="0" data-k="reorder" value="${esc(vv(it.reorder))}" aria-label="Low stock level"></td>
+    <td><input type="number" inputmode="decimal" step="any" data-k="init" value="${esc(vv(it.init))}" aria-label="Starting stock"></td>
+    <td><button class="btn danger sm" data-del aria-label="Delete item">Delete</button></td>
+  </tr>`).join('');
+}
+$('itemsBody').addEventListener('input',ev=>{
+  const k=ev.target.dataset.k;if(!k)return;
+  const it=db.items.find(i=>i.id===ev.target.closest('tr').dataset.id);if(!it)return;
+  it[k]=(k==='rate'||k==='reorder'||k==='init')?num(ev.target.value):ev.target.value;
+  save();
+});
+$('itemsBody').addEventListener('change',ev=>{
+  const k=ev.target.dataset.k;if(!k)return;
+  const it=db.items.find(i=>i.id===ev.target.closest('tr').dataset.id);if(!it)return;
+  if(ev.target.tagName==='SELECT'){it[k]=ev.target.value;save();}
+});
+$('itemsBody').addEventListener('click',ev=>{
+  if(!ev.target.matches('[data-del]'))return;
+  const id=ev.target.closest('tr').dataset.id,it=db.items.find(i=>i.id===id);
+  if(!it||!confirm('Delete "'+it.name+'" and its saved history on every day? This cannot be undone.'))return;
+  db.items=db.items.filter(i=>i.id!==id);
+  Object.keys(db.days).forEach(d=>{delete db.days[d][id];if(!Object.keys(db.days[d]).length)delete db.days[d];});
+  save();renderItems();toast('Item deleted');
+});
+$('addItem').addEventListener('click',()=>{
+  db.items.push({id:'i'+(db.nextId++),name:'New item',category:'Sweets',unit:'Pcs',rate:0,reorder:0,init:0});
+  save();renderItems();
+  const rows=$('itemsBody').querySelectorAll('tr'),inp=rows[rows.length-1].querySelector('input');inp.focus();inp.select();
+});
+$('bulkAdd').addEventListener('click',()=>{
+  const lines=$('bulkText').value.split('\n').map(s=>s.trim()).filter(Boolean);let n=0;
+  for(const ln of lines){
+    const p=ln.split(',').map(s=>s.trim());if(!p[0])continue;
+    const cat=CATS.find(c=>c.toLowerCase()===(p[1]||'').toLowerCase())||'Other';
+    const unit=UNITS.find(u=>u.toLowerCase()===(p[2]||'').toLowerCase())||p[2]||'Pcs';
+    db.items.push({id:'i'+(db.nextId++),name:p[0],category:cat,unit:unit,rate:num(p[3]),reorder:0,init:0});n++;
+  }
+  if(!n){toast('Nothing to add. Use: Name, Category, Unit, Rate',true);return;}
+  $('bulkText').value='';save();renderItems();toast(n+' item'+(n>1?'s':'')+' added');
+});
+
+/* ---------- day summary ---------- */
+function table(head,rows,foot){
+  return `<div class="wrap"><table><thead><tr>${head.map((h,i)=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i===0?'item':''}">${c}</td>`).join('')}</tr>`).join('')}</tbody>${foot?`<tfoot><tr>${foot.map((c,i)=>`<td class="${i===0?'item':''}">${c}</td>`).join('')}</tr></tfoot>`:''}</table></div>`;
+}
+function kpiHTML(list){return list.map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join('');}
+function renderSummary(){
+  const d=cur(),t=dayTotals(d);
+  $('sumKpis').innerHTML=kpiHTML([[money(t.value),'Sales value'],[t.soldItems,'Items sold'],[r3(t.waste),'Wastage and returns'],[r3(t.close),'Closing stock (all units)']]);
+  const top=t.rows.filter(x=>x.c.sold>0).sort((a,b)=>b.c.value-a.c.value).slice(0,5);
+  $('sumTop').innerHTML=top.length?table(['Item','Sold','Sales value'],top.map(x=>[esc(x.it.name),r3(x.c.sold)+' '+esc(x.it.unit),money(x.c.value)])):'<div class="empty">No sales entered for this day.</div>';
+  const cats={};
+  t.rows.forEach(({it,c})=>{const k=it.category;cats[k]=cats[k]||{sold:0,waste:0,value:0,close:0};cats[k].sold+=c.sold;cats[k].waste+=c.waste;cats[k].value+=c.value;cats[k].close+=c.close;});
+  const keys=Object.keys(cats).sort((a,b)=>ci(a)-ci(b));
+  $('sumCat').innerHTML=keys.length?table(['Category','Sold','Wastage','Closing','Sales value'],keys.map(k=>[esc(k),r3(cats[k].sold),r3(cats[k].waste),r3(cats[k].close),money(cats[k].value)])):'<div class="empty">No items yet.</div>';
+  $('sumAlerts').innerHTML=alertHTML(alertLists(t));
+}
+
+/* ---------- range report ---------- */
+function rangeDates(){
+  const a=$('rFrom').value,b=$('rTo').value;
+  return sortedDates().filter(d=>(!a||d>=a)&&(!b||d<=b));
+}
+function renderReport(){
+  const ds=rangeDates();
+  if(!ds.length){
+    $('repKpis').innerHTML=kpiHTML([[money(0),'Sales value'],[0,'Days with entries'],[0,'Quantity sold'],[0,'Wastage and returns']]);
+    $('repDays').innerHTML='<div class="empty">No saved days in this range.</div>';$('repItems').innerHTML='<div class="empty">No saved days in this range.</div>';return;
+  }
+  let tv=0,ts=0,tw=0;const perItem={};const dayRows=[];
+  ds.forEach(d=>{
+    const t=dayTotals(d);tv+=t.value;ts+=t.sold;tw+=t.waste;
+    dayRows.push([prettyDate(d)+' ('+weekday(d).slice(0,3)+')',t.soldItems,r3(t.sold),r3(t.waste),money(t.value)]);
+    t.rows.forEach(({it,c})=>{const p=perItem[it.id]=perItem[it.id]||{it,sold:0,waste:0,value:0};p.sold+=c.sold;p.waste+=c.waste;p.value+=c.value;});
+  });
+  $('repKpis').innerHTML=kpiHTML([[money(tv),'Sales value'],[ds.length,'Days with entries'],[r3(ts),'Quantity sold'],[r3(tw),'Wastage and returns']]);
+  $('repDays').innerHTML=table(['Date','Items sold','Quantity sold','Wastage','Sales value'],dayRows,['Total','',r3(ts),r3(tw),money(tv)]);
+  const rows=Object.values(perItem).sort((a,b)=>b.value-a.value).map(p=>[esc(p.it.name),esc(p.it.unit),r3(p.sold),r3(p.waste),money(p.value)]);
+  $('repItems').innerHTML=table(['Item','Unit','Sold','Wastage','Sales value'],rows,['Total','',r3(ts),r3(tw),money(tv)]);
+}
+$('rFrom').addEventListener('change',renderReport);
+$('rTo').addEventListener('change',renderReport);
+
+/* ---------- Excel export (matches your Daily Inventory template) ---------- */
+const MONEY='"₹"#,##0.00';
+function buildWorkbook(dates){
+  if(typeof XLSX==='undefined'){toast('Excel library did not load. Connect to the internet and reload.',true);return null;}
+  const H=['Date','Sweet Item','Opening Stock (Pcs/Kg)','Received Today','Total Available','Sold Today','Wastage/Returns','Closing Stock','Unit','Rate per Unit (₹)','Sales Value (₹)'];
+  const ws={},cols='ABCDEFGHIJK';
+  H.forEach((h,i)=>ws[cols[i]+'1']={t:'s',v:h});
+  let row=2;const dayRowsInfo=[];
+  dates.forEach(d=>{
+    let o=0,dv=0,ds=0,dw=0,sold=0;
+    orderedItems().forEach(it=>{
+      const c=calc(d,it),r=row;
+      ws['A'+r]={t:'d',v:parseISO(d),z:'dd-mmm-yyyy'};
+      ws['B'+r]={t:'s',v:it.name};
+      ws['C'+r]={t:'n',v:c.open};
+      ws['D'+r]={t:'n',v:c.recv};
+      ws['E'+r]={t:'n',f:`C${r}+D${r}`,v:c.avail};
+      ws['F'+r]={t:'n',v:c.sold};
+      ws['G'+r]={t:'n',v:c.waste};
+      ws['H'+r]={t:'n',f:`E${r}-F${r}-G${r}`,v:c.close};
+      ws['I'+r]={t:'s',v:it.unit};
+      ws['J'+r]={t:'n',v:c.rate,z:MONEY};
+      ws['K'+r]={t:'n',f:`F${r}*J${r}`,v:c.value,z:MONEY};
+      dv+=c.value;ds+=c.sold;dw+=c.waste;if(c.sold>0)sold++;row++;
+    });
+    dayRowsInfo.push({d,items:sold,qty:r3(ds),waste:r3(dw),value:dv});
+  });
+  const last=row-1;
+  if(last>=2){
+    ws['B'+row]={t:'s',v:'TOTAL'};
+    ['D','F','G','H','K'].forEach(L=>{
+      let v=0;for(let r=2;r<=last;r++)v+=ws[L+r].v;
+      ws[L+row]={t:'n',f:`SUM(${L}2:${L}${last})`,v:r3(v),z:L==='K'?MONEY:undefined};
+    });
+    ws['!autofilter']={ref:`A1:K${last}`};
+  }
+  ws['!ref']=`A1:K${Math.max(row,2)}`;
+  ws['!cols']=[14,24,14,13,13,12,14,13,9,14,15].map(w=>({wch:w}));
+
+  /* Summary sheet with live formulas pointing at the Daily Inventory sheet */
+  const sm={};['Date','Items Sold','Qty Sold','Wastage','Sales Value (₹)'].forEach((h,i)=>sm['ABCDE'[i]+'1']={t:'s',v:h});
+  const rng=L=>`'Daily Inventory'!$${L}$2:$${L}$${Math.max(last,2)}`;
+  dayRowsInfo.forEach((x,i)=>{
+    const r=i+2;
+    sm['A'+r]={t:'d',v:parseISO(x.d),z:'dd-mmm-yyyy'};
+    sm['B'+r]={t:'n',f:`COUNTIFS(${rng('A')},A${r},${rng('F')},">0")`,v:x.items};
+    sm['C'+r]={t:'n',f:`SUMIFS(${rng('F')},${rng('A')},A${r})`,v:x.qty};
+    sm['D'+r]={t:'n',f:`SUMIFS(${rng('G')},${rng('A')},A${r})`,v:x.waste};
+    sm['E'+r]={t:'n',f:`SUMIFS(${rng('K')},${rng('A')},A${r})`,v:x.value,z:MONEY};
+  });
+  const sl=dayRowsInfo.length+1,tr=sl+1;
+  if(dayRowsInfo.length){
+    sm['A'+tr]={t:'s',v:'TOTAL'};
+    ['B','C','D','E'].forEach(L=>{
+      let v=0;for(let r=2;r<=sl;r++)v+=sm[L+r].v;
+      sm[L+tr]={t:'n',f:`SUM(${L}2:${L}${sl})`,v:r3(v),z:L==='E'?MONEY:undefined};
+    });
+    sm['A'+(tr+2)]={t:'s',v:'Quantity totals add Pcs and Kg together. Use Sales Value to compare days.'};
+  }
+  sm['!ref']=`A1:E${tr+2}`;sm['!cols']=[16,12,12,12,16].map(w=>({wch:w}));
+
+  /* Items sheet */
+  const im={};['Item','Category','Unit','Rate (₹)','Low stock at','Starting stock'].forEach((h,i)=>im['ABCDEF'[i]+'1']={t:'s',v:h});
+  orderedItems().forEach((it,i)=>{const r=i+2;
+    im['A'+r]={t:'s',v:it.name};im['B'+r]={t:'s',v:it.category};im['C'+r]={t:'s',v:it.unit};
+    im['D'+r]={t:'n',v:num(it.rate),z:MONEY};im['E'+r]={t:'n',v:num(it.reorder)};im['F'+r]={t:'n',v:num(it.init)};});
+  im['!ref']=`A1:F${db.items.length+1}`;im['!cols']=[24,16,10,12,13,14].map(w=>({wch:w}));
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Daily Inventory');
+  XLSX.utils.book_append_sheet(wb,sm,'Summary');
+  XLSX.utils.book_append_sheet(wb,im,'Items');
+  return wb;
+}
+function doExport(dates,name){
+  if(!db.items.length){toast('Add items first',true);return;}
+  const wb=buildWorkbook(dates);if(!wb)return;
+  try{XLSX.writeFile(wb,name,{cellDates:true});toast('Excel file ready: '+name);}
+  catch(e){toast('Export failed: '+e.message,true);}
+}
+$('exportDay').addEventListener('click',()=>doExport([cur()],'Daily_Inventory_'+cur()+'.xlsx'));
+$('exportAll').addEventListener('click',()=>{
+  const ds=sortedDates();if(!ds.length){toast('No saved days to export yet',true);return;}
+  doExport(ds,'Daily_Inventory_'+ds[0]+'_to_'+ds[ds.length-1]+'.xlsx');
+});
+$('exportRange').addEventListener('click',()=>{
+  const ds=rangeDates();if(!ds.length){toast('No saved days in this range',true);return;}
+  doExport(ds,'Daily_Inventory_'+ds[0]+'_to_'+ds[ds.length-1]+'.xlsx');
+});
+
+/* ---------- backup + restore ---------- */
+$('backupBtn').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='inventory-backup-'+toISO(new Date())+'.json';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+  toast('Backup downloaded');
+});
+$('restoreBtn').addEventListener('click',()=>$('restoreFile').click());
+$('restoreFile').addEventListener('change',ev=>{
+  const f=ev.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d||!Array.isArray(d.items)||!d.days||typeof d.days!=='object')throw new Error('This is not an inventory backup file');
+      if(!confirm('Replace everything on this device with the backup? Current data will be lost.'))return;
+      if(!d.nextId)d.nextId=d.items.length+1000;
+      db=d;save();refresh();toast('Backup restored');
+    }catch(e){toast('Could not restore: '+e.message,true);}
+    ev.target.value='';
+  };
+  rd.readAsText(f);
+});
+
+/* ---------- start ---------- */
+const now=new Date();
+$('date').value=toISO(now);
+$('rFrom').value=toISO(new Date(now.getFullYear(),now.getMonth(),1));
+$('rTo').value=toISO(now);
+refresh();
+})();
+</script>
+
+</body>
+</html>
